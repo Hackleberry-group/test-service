@@ -1,0 +1,6 @@
+﻿services:
+  testservice:
+    image: testservice
+    build:
+      context: .
+      dockerfile: Dockerfile
