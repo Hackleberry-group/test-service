@@ -5,7 +5,7 @@ env:
   OPENSHIFT_TOKEN: ${{ secrets.OPENSHIFT_TOKEN }}
   GHCR_USERNAME: ${{ secrets.GITHUB_ACTOR }}
   GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  GHCR_IMAGE_NAME: "ghcr.io/Hackleberry-group/test-service-bj"
+  GHCR_IMAGE_NAME: "ghcr.io/hackleberry-group/test-service-bj"
   DOCKER_IMAGE_TAG: "latest"
   OPENSHIFT_NAMESPACE: "delta-dev"
   APP_NAME: "test-service-bj-ghcr"
