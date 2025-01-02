@@ -3,12 +3,12 @@ name: OpenShift CI/CD Workflow
 env:
   OPENSHIFT_SERVER: ${{ secrets.OPENSHIFT_SERVER }}
   OPENSHIFT_TOKEN: ${{ secrets.OPENSHIFT_TOKEN }}
-  DOCKERHUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
-  DOCKERHUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
-  DOCKERHUB_IMAGE_NAME: "test-service-bj"
-  DOCKER_IMAGE_TAG: "plzwork"
+  GHCR_USERNAME: ${{ secrets.GITHUB_ACTOR }}
+  GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GHCR_IMAGE_NAME: "ghcr.io/Hackleberry-group/test-service-bj"
+  DOCKER_IMAGE_TAG: "latest"
   OPENSHIFT_NAMESPACE: "delta-dev"
-  APP_NAME: "test-service-bj"
+  APP_NAME: "test-service-bj-ghcr"
   APP_PORT: "1030"
   IMAGE_TAGS: "latest"
 
@@ -25,7 +25,6 @@ jobs:
     runs-on: ubuntu-20.04
 
     steps:
-      # Check for required secrets
       - name: Check for required secrets
         uses: actions/github-script@v6
         with:
@@ -43,13 +42,14 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # Build Docker image locally and push to Docker Hub
+      - name: Log in to GHCR
+        run: echo ${{ secrets.GHCR_TOKEN }} | docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} --password-stdin
+
       - name: Build Docker image
         id: build-image
         run: |
-          echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
-          docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.DOCKERHUB_IMAGE_NAME }}:${{ env.DOCKER_IMAGE_TAG }} .
-          docker push ${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.DOCKERHUB_IMAGE_NAME }}:${{ env.DOCKER_IMAGE_TAG }}
+          docker build -t ${{ env.GHCR_IMAGE_NAME }}:${{ env.DOCKER_IMAGE_TAG }} .
+          docker push ${{ env.GHCR_IMAGE_NAME }}:${{ env.DOCKER_IMAGE_TAG }}
 
       - name: Install OpenShift CLI
         uses: redhat-actions/openshift-tools-installer@v1
@@ -63,15 +63,11 @@ jobs:
           openshift_token: ${{ env.OPENSHIFT_TOKEN }}
           insecure_skip_tls_verify: true
           namespace: ${{ env.OPENSHIFT_NAMESPACE }}
-          
-          
-      # Set image path for deployment in OpenShift
+
       - name: Set Registry Path as Environment Variable
-        run: echo "REGISTRY_PATH=docker.io/${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.DOCKERHUB_IMAGE_NAME }}" >> $GITHUB_ENV
+        run: echo "REGISTRY_PATH=${{ env.GHCR_IMAGE_NAME }}" >> $GITHUB_ENV
 
-
-      # Create and expose OpenShift application using the Docker Hub image
-      - name: Deploy to OpenShift from Docker Hub
+      - name: Deploy to OpenShift from GHCR
         id: deploy-and-expose
         uses: redhat-actions/oc-new-app@v1
         with:
@@ -79,7 +75,6 @@ jobs:
           image: ${{ env.REGISTRY_PATH }}:${{ env.DOCKER_IMAGE_TAG }}
           namespace: ${{ env.OPENSHIFT_NAMESPACE }}
 
-      # Print application URL
       - name: Print application URL
         run: |
           echo "Your application is deployed and accessible at:"
