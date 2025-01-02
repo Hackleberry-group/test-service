@@ -1,0 +1,89 @@
+name: OpenShift CI/CD Workflow
+
+env:
+  OPENSHIFT_SERVER: ${{ secrets.OPENSHIFT_SERVER }}
+  OPENSHIFT_TOKEN: ${{ secrets.OPENSHIFT_TOKEN }}
+  DOCKERHUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
+  DOCKERHUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
+  DOCKERHUB_IMAGE_NAME: "test-service-bj"
+  DOCKER_IMAGE_TAG: "latest"
+  OPENSHIFT_NAMESPACE: "delta-dev"
+  APP_NAME: "test-service-bj"
+  APP_PORT: "1030"
+  IMAGE_REGISTRY: image-registry.openshift-image-registry.svc:5000/delta-dev
+  IMAGE_TAGS: "latest"
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - staging
+
+jobs:
+  openshift-ci-cd:
+    name: Build, Push, and Deploy to OpenShift
+    runs-on: ubuntu-20.04
+
+    steps:
+      # Check for required secrets
+      - name: Check for required secrets
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const secrets = {
+              OPENSHIFT_SERVER: `${{ secrets.OPENSHIFT_SERVER }}`,
+              OPENSHIFT_TOKEN: `${{ secrets.OPENSHIFT_TOKEN }}`
+            };
+
+            const missingSecrets = Object.entries(secrets).filter(([key, value]) => !value);
+            if (missingSecrets.length > 0) {
+              core.setFailed(`The following secrets are missing: ${missingSecrets.map(([key]) => key).join(', ')}`);
+            }
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Update Git submodules
+        run: git submodule update --init --recursive
+
+      # Build Docker image locally and push to Docker Hub
+      - name: Build Docker image
+        id: build-image
+        run: |
+          docker login -u ${{ secrets.DOCKERHUB_USERNAME }} -p ${{ secrets.DOCKERHUB_TOKEN }}
+          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKERHUB_IMAGE_NAME }}:${{ env.DOCKER_IMAGE_TAG }} .
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKERHUB_IMAGE_NAME }}:${{ env.DOCKER_IMAGE_TAG }}
+
+      # Set image path for deployment in OpenShift
+      - name: Set Registry Path as Environment Variable
+        run: echo "REGISTRY_PATH=docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKERHUB_IMAGE_NAME }}" >> $GITHUB_ENV
+
+      - name: Install OpenShift CLI
+        uses: redhat-actions/openshift-tools-installer@v1
+        with:
+          oc: 4
+
+      - name: Log in to OpenShift
+        uses: redhat-actions/oc-login@v1
+        with:
+          openshift_server_url: ${{ env.OPENSHIFT_SERVER }}
+          openshift_token: ${{ env.OPENSHIFT_TOKEN }}
+          insecure_skip_tls_verify: true
+          namespace: ${{ env.OPENSHIFT_NAMESPACE }}
+
+      # Create and expose OpenShift application using the Docker Hub image
+      - name: Deploy to OpenShift from Docker Hub
+        id: deploy-and-expose
+        uses: redhat-actions/oc-new-app@v1
+        with:
+          app_name: ${{ env.APP_NAME }}
+          image: ${{ env.REGISTRY_PATH }}:${{ env.DOCKER_IMAGE_TAG }}
+          namespace: ${{ env.OPENSHIFT_NAMESPACE }}
+          port: ${{ env.APP_PORT }}
+
+      # Print application URL
+      - name: Print application URL
+        run: |
+          echo "Your application is deployed and accessible at:"
+          oc get route ${{ env.APP_NAME }} -o jsonpath='{.spec.host}'
