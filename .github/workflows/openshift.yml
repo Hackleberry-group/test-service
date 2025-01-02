@@ -78,7 +78,6 @@ jobs:
           app_name: ${{ env.APP_NAME }}
           image: ${{ env.REGISTRY_PATH }}:${{ env.DOCKER_IMAGE_TAG }}
           namespace: ${{ env.OPENSHIFT_NAMESPACE }}
-          port: "8080,8181"
 
       # Print application URL
       - name: Print application URL
